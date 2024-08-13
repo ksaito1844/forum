@@ -43,7 +43,7 @@ public class TopicController {
     @RequestMapping(value = "/topics/{idTopic}", method = RequestMethod.GET)
     public String getTopicById(@PathTopic Topic topic, Model model) {
         model.addAttribute("topic", topic);
-        List<Post> posts = postService.findByTopic(topic.getId());
+        List<Post> posts = postService.findByTopic(topic);
         model.addAttribute("topicPost", posts.get(0));
         model.addAttribute("posts", posts.stream().skip(1).collect(Collectors.toList()));
         model.addAttribute("newPost", new NewPostForm());
@@ -79,7 +79,7 @@ public class TopicController {
     @GetMapping(value = {"/topics/new"})
     public String getNewTopicForm(@Param("sectionId") Integer sectionId, Model model) {
         if (sectionId != null) {
-            model.addAttribute("selectedSection", sectionService.findOne(sectionId));
+            model.addAttribute("selectedSection", sectionService.findOneOrExit(sectionId));
         }
         model.addAttribute("newTopic", NewTopicForm.builder().sectionId(sectionId).build());
         model.addAttribute("sections", sectionService.findAll());
@@ -97,23 +97,27 @@ public class TopicController {
             return getNewTopicForm(newTopic.getSectionId(), model);
         }
         User user = userService.findByEmailOrExit(authentication.getName());
-        Section section = sectionService.findOne(newTopic.getSectionId());
+        Section section = sectionService.findOneOrExit(newTopic.getSectionId());
         Topic topic = topicService.createNewTopic(newTopic, user, section);
         return "redirect:/topics/" + topic.getId();
     }
 
+    @PreAuthorize("hasAuthority('USER')")
     @RequestMapping(value = "delete/{idTopic}", method = RequestMethod.GET)
     public String delete(@PathTopic Topic topic,
                          Authentication authentication,
                          RedirectAttributes model) {
-        if (!authentication.getName().equals(topic.getUser().getEmail())) {
+        if (!isTopicOwner(topic, authentication)) {
             return "redirect:/topics/" + topic.getId();
         }
-
         topicService.delete(topic);
 
         model.addFlashAttribute("message", "topic.successfully.deleted");
         return "redirect:/section/" + topic.getSection().getId();
+    }
+
+    private static boolean isTopicOwner(Topic topic, Authentication authentication) {
+        return authentication.getName().equals(topic.getUser().getEmail());
     }
 
 }
